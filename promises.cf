@@ -12,6 +12,7 @@ body common control
                         # Common bundle first (Best Practice)
                           inventory_control,
                           @(inventory.bundles),
+                          @(skeletorg_main_file_control.common_bundles),
                           def,
                           cfe_internal_hub_vars,
 
@@ -25,6 +26,7 @@ body common control
                          # Agent bundle
                           cfe_internal_management,   # See cfe_internal/CFE_cfengine.cf
                           service_catalogue,
+
 
       };
 
@@ -66,6 +68,7 @@ body common control
 
                 # List of services here
                   "services/file_change.cf",
+                  "services/skeletorg/main.cf",
 
       };
 
@@ -232,6 +235,15 @@ bundle agent service_catalogue
       comment => "Basic change management",
       handle => "service_catalogue_change_management",
       usebundle => change_management;
+
+   # Here is the main policy entry for our orginization. If other groups want
+   # to start managing their own policies, or if we acquire another
+   # orginization, we can greate an org tree for them and activate it here.
+      "skeletorg"
+        usebundle => skeletorg_main,
+        handle => "service_catalogue_methods_any_skeletorg",
+        comment => "If we don't activate policy for skeletorg, then the whole
+                    orginization will not know if it is as desirged or not.";
 
 }
 
