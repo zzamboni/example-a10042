@@ -12,7 +12,7 @@ body common control
                         # Common bundle first (Best Practice)
                           inventory_control,
                           @(inventory.bundles),
-                          @(skeletorg_main_file_control.common_bundles),
+                          @(classification_main_file_control.bundles),
                           def,
                           cfe_internal_hub_vars,
 
@@ -26,7 +26,6 @@ body common control
                          # Agent bundle
                           cfe_internal_management,   # See cfe_internal/CFE_cfengine.cf
                           service_catalogue,
-
 
       };
 

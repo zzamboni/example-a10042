@@ -1,0 +1,26 @@
+{
+  "192.168.33.2/32": {
+    "subnet_nickname": "mgmt",
+    "city": "Lawrence",
+    "state": "Kansas",
+    "country": "USA",
+    "site": "over_rainbow",
+    "continent": "North America"
+  },
+  "192.168.33.3/32": {
+    "subnet_nickname": "host001",
+    "city": "Paris"
+    "state": "Texas",
+    "country": "USA",
+    "site": "lonestar",
+    "continent": "North America"
+  },
+  "192.168.33.4/32": {
+    "subnet_nickname": "host002",
+    "city": "Oslo",
+    "state": "Ostlandet",
+    "country": "Norway",
+    "site": "tiger_city",
+    "continent": "Europe"
+  }
+}

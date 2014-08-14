@@ -1,0 +1,20 @@
+bundle common skeletorg_main_file_control
+{
+  vars:
+    "inputs"
+      slist => {
+                 "$(this.promise_dirname)/classification/main.cf"
+               };
+}
+
+body file control
+{
+  inputs => { @(skeletorg_main_file_control.inputs) };
+}
+
+bundle agent skeletorg_main
+{
+  reports:
+    (inform_mode|verbose_mode)::
+      "$(this.bundle): Activated";
+}

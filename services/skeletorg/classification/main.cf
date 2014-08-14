@@ -1,0 +1,17 @@
+bundle common classification_main_file_control
+{
+  vars:
+    "inputs"
+      slist => {
+                 "$(this.promise_dirname)/subnet_location/main.cf",
+               };
+
+    "bundles"
+      slist => {
+                 "classify_subnet_location",
+               };
+}
+body file control
+{
+  inputs => { @(classification_main_file_control.inputs) };
+}

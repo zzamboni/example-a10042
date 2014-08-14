@@ -1,11 +1,12 @@
 # Integrating your orginization
 
-But where should I put myu orginizations policy files you ask? You can and
-should organize your policies in any way that makes sense to you. I very much
-encourage you to come to a consensus as an orginization, or at least team. Seek
-input from others if its up to a single person alone, and be sure to record
-your reasons for choosing the a specific pattern. There truly is no right or
-wrong.
+Where should I put my orginizations policy files you ask?
+
+You can and should organize your policies in any way that makes sense to you.
+I very much encourage you to come to a consensus as an orginization, or at
+least team. Seek input from others if its up to a single person alone, and be
+sure to record your reasons for choosing the a specific pattern. There truly is
+no right or wrong.
 
 That having been said, I encourage you to organize your policy from a "service"
 perspective. Service can also be a loaded word. To a sysadmin, a service may
@@ -24,7 +25,27 @@ We will create the `skeletorg` directory inside of the services directory at
 the top level of masterfiles and put all of our custom policy and files inside
 of it. If you don't know what masterfiles is please read the documentation
 [here][policy-framework], [here][authoring-workflow],
-[here][bundles-best-practice] and [here][policy-style].
+[here][bundles-best-practice] and [here][policy-style]. From here on I will be
+refering to files *relative to the root of your masterfiles directory*.
+
+Create `services/skeletorg/main.cf` with the following content:
+
+```
+bundle agent skeletorg_main
+{
+
+  reports:
+    (inform_mode|verbose_mode)::
+      "$(this.bundle): Activated";
+}
+```
+
+`skeletorg_main_file_control` is where we will define additional inputs for our
+policy, as well as any common bundles that you would like to explicitly add to
+the bundlesequence. No additional inputs are defined yet, but there is just
+enough policy to validate and run. Lets check the syntax, and then run the
+policy.
+
 
 Lets go ahead and make a few additons to `promises.cf` (the default policy
 entry). In order for your orginizations policy to be evaluated your policy files must
@@ -39,22 +60,6 @@ diff --git a/promises.cf b/promises.cf
 index af6f89f..5dd3eae 100644
 --- a/promises.cf
 +++ b/promises.cf
-@@ -12,6 +12,7 @@ body common control
-                         # Common bundle first (Best Practice)
-                           inventory_control,
-                           @(inventory.bundles),
-+                          @(skeletorg_main_file_control.common_bundles),
-                           def,
-                           cfe_internal_hub_vars,
- 
-@@ -26,6 +27,7 @@ body common control
-                           cfe_internal_management,   # See cfe_internal/CFE_cfengine.cf
-                           service_catalogue,
- 
-+
-       };
- 
-       inputs => {
 @@ -66,6 +68,7 @@ body common control
  
                  # List of services here
@@ -81,15 +86,451 @@ index af6f89f..5dd3eae 100644
  # special body for update/*.cf compatibility
 ```
 
+First I added the path to skeletorgs main poilcy. Any additional policy files
+we create will be added from here.
+
+Second I activated the main policy using a [methods type promise][methods].
+
+
+Now lets validate that our policy is syntatically correct
+```
+cf-promises --full-check --file ./promises.cf
+
+[root@hub masterfiles]# cf-agent -KIf ./promises.cf
+2014-08-08T03:02:40+0000     info: /default/inventory_autorun/methods/'packages_refresh'/default/cfe_autorun_inventory_packages/packages: Installing cfe_internal_non_existing_package...
+2014-08-08T03:02:40+0000     info: /default/inventory_autorun/methods/'packages_refresh'/default/cfe_autorun_inventory_packages/packages/'cfe_internal_non_existing_package'[0]: Q:yum --quiet -y insta ...:Error: Nothing to do
+R: cfe_autorun_inventory_packages: refresh interval is 10080
+R: cfe_autorun_inventory_packages: we have the inventory files.
+R: inventory_linux: OS release ID = $(os_release_id), OS release version = $(os_release_version)
+R: cfe_internal_apache_sudoer: editing of the sudoers file is disabled; the Apache user may not be able to run passwordless sudo cf-runagent
+R: skeletorg_main: Activated
+```
+
+The last line tells us our skeletorg_main entry bundle was activated. Now we
+can move on to adding something useful.
+
+# Who's who and what's what
+
+Classification is key, It is not uncommon to spend a significant amount of time
+determining how you want to classify systems, and it is very likely that you
+will revisit it from time to time improving and adding new classification
+options. Geographic classification can be quite useful, and in my experience
+commonly map to subnets. We will classify location based on subnets stored
+in an external JSON data file. Over time its likely that you will add
+additional classification systems, for example you may want to classify systems
+based on parsing the hostname. We will structure this classification policy
+with that in mind.
+
+Create `services/skeletorg/classification` to store all of our classification
+policies. Another way to think of classification is dynamic host grouping. All
+of our custom classification policies will be included and driven from
+`services/skeletorg/classification/main.cf`. Create it with the following
+content.
+
+```cf3
+bundle common classification_main_file_control
+{
+  vars:
+    "inputs"
+      slist => {
+                 "$(this.promise_dirname)/subnet_location/main.cf",
+               };
+
+    "bundles"
+      slist => {
+                 "classify_subnet_location",
+               };
+}
+body file control
+{
+  inputs => { @(classification_main_file_control.inputs) };
+}
+```
+
+What does this policy do?
+
+Bundle common classification_main_file_control defines two varaibles that we
+will use to integrate our policy into the Masterfiles Policy Framework (MPF).
+`inputs` defines a list of files that should be included in body common control
+inputs. Note how the files are referenced using
+[$(this.promise_dirname)][this_promise_dirname]. I think this helps to keep the policy
+modular and makes things easier if you ever decide to re-organize and shuffle
+your directories around. We could use this varibale directly in the list of
+inputs defined in body common control, but I (currently) find its more elegant
+to extend inputs in body common control using the new (as of 3.6.0)
+[inputs attribute in body file control][body-file-control-inputs] as shown
+above. `bundles` contains a list of common bundles that we want to
+specifically activate early in the bundlesequence in body common control. There
+is no way to automagically prepend or append to the bundlesequnce, nor do I
+(currently) think there should be. You don't have to add common bundles to the
+bundlesequence, but for common bundles that do classification and inventory
+it's generally considered a [best practice][best_practice_is_bad_blog].
+
+Let's go ahead and lay down the subnet location classification policy. Create
+`services/skeletorg/classification/subnet_location/main.cf` with the following
+content:
+
+```cf3
+bundle common classify_subnet_location
+{
+  vars:
+      "subnet_data"
+        data => readjson( "$(this.promise_dirname)/data/subnet_location.json", 10M );
+
+      "subnets" slist => getindices("subnet_data");
+
+      "subnet_nickname"
+        string => "subnet_$(subnet_data[$(subnets)][subnet_nickname])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][subnet_nickname])"),
+        meta => { "inventory", "attribute_name=subnet nickname" };
+
+      "city"
+        string => "$(subnet_data[$(subnets)][city])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][city])"),
+        meta => { "inventory", "attribute_name=city" };
+
+      "state"
+        string => "$(subnet_data[$(subnets)][state])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][state])"),
+        meta => { "inventory", "attribute_name=state" };
+
+      "country"
+        string => "$(subnet_data[$(subnets)][country])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][country])"),
+        meta => { "inventory", "attribute_name=country" };
+
+      "continent"
+        string => "$(subnet_data[$(subnets)][continent])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][continent])"),
+        meta => { "inventory", "attribute_name=continent" };
+
+      "site"
+        string => "$(subnet_data[$(subnets)][site])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][site])"),
+        meta => { "inventory", "attribute_name=site" };
+
+  classes:
+
+      "subnet_$(subnet_data[$(subnets)][subnet_nickname])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)"},
+        comment => "We commonly refer to subnets by nickname. It could be
+                    43net, or something more fuzzy like frontend_webservers,
+                    this just provides a standard way to reference subnets with
+                    our normal terminoligy. Whatever the nickname, we prefix
+                    with 'subnet_' to clearly identify it as a subnet. We also
+                    set a meta tag to associate it back to the numeric subnet.";
+
+      "$(subnet_data[$(subnets)][city])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][state])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][country])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][continent])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][site])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+  reports:
+
+      DEBUG::
+        "$(this.bundle): Activated";
+        "$(this.bundle): Found subnet $(subnets)";
+        "$(this.bundle): Found subnet nickname: $(subnet_nickname)";
+        "$(this.bundle): Found subnet city: $(city)";
+        "$(this.bundle): Found subnet state: $(state)";
+        "$(this.bundle): Found subnet continent: $(continent)";
+        "$(this.bundle): Found subnet country: $(country)";
+        "$(this.bundle): Found subnet site: $(site)";
+}
+```
+
+What does this policy do?
+
+This policy sets variables and classes for location data as it relates to
+subnets using data sourced from an external json file. First, the json data is
+read into the `subnet_data` variable. We then get a list of subnets from the
+`subnet_data` variable. Once we have the list of subnets we can iterate over
+each subnet and set variables if we are in on one of those subnets. Remember
+that each host will determine this for itself as it evaluates the policy.
+Before we get to far lets put some JSON data in place so we can better
+understand how those specific variables are being extracted.
+
+Create
+`services/skeletorg/classification/subnet_location/data/subnet_location.json`
+with the following content:
+
+```json
+{
+  "192.168.33.2/32": {
+    "subnet_nickname": "33_2",
+    "city": "Lawrence",
+    "state": "Kansas",
+    "country": "USA",
+    "site": "over_rainbow",
+    "continent": "North America"
+  },
+  "192.168.33.3/32": {
+    "subnet_nickname": "host001",
+    "city": "Paris"
+    "state": "Texas",
+    "country": "USA",
+    "site": "lonestar",
+    "continent": "North America"
+  },
+  "192.168.33.4/32": {
+    "subnet_nickname": "host002",
+    "city": "Oslo",
+    "state": "Ostlandet",
+    "country": "Norway",
+    "site": "tiger_city",
+    "continent": "Europe"
+  }
+}
+```
+
+Looking at the JSON data we can see that we have 3 (very small) subnets.
+`192.168.33.2/32`, `192.168.33.2/32`, and `192.168.33.2/32` each have
+ a subnet nickname, city, state, country, site and continent associated with
+them. When this data is loaded into a CFEngine variable we can access it like a
+traditional CFEngine array. For example `$(subnet_data[192.168.33.2/32][site])`
+would expand to `over_rainbow`.
+
+Going back to our `classify_subnet_location` bundle we can see this in use:
+
+
+```cf3
+      "city"
+        string => "subnet_$(subnet_data[$(subnets)][subnet_nickname])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][subnet_nickname])"),
+        meta => { "inventory", "attribute_name=subnet nickname" };
+```
+
+Instead of pulling data from a specifc subnet we are using CFEngines
+[implicit list iteration][implicit_list_iteration] to loop over each subnet and
+extract the subnet_nickname associated with it. We use
+[ifvarclass][ifvarclass_documentation] to restrict the promise to only activate
+when a class for that subnet_nickname is defined. We do not yet have any
+classes for any of the cities defined, so this promise will be skipped on the
+first pass along with the rest of the variables that are restricted to classes
+that are as of yet undefined. CFEngine has a concept called
+[Normal Ordering][normal_ordering] which refers to the order in which promise
+types are evaluated. The next promise type to be evaluated that we have
+promises for are classes, so lets take a look.
+
+
+```cf3
+  classes:
+
+      "subnet_$(subnet_data[$(subnets)][subnet_nickname])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)"},
+        comment => "We commonly refer to subnets by nickname. It could be
+                    43net, or something more fuzzy like frontend_webservers,
+                    this just provides a standard way to reference subnets with
+                    our normal terminoligy. Whatever the nickname, we prefix
+                    with 'subnet_' to clearly identify it as a subnet. We also
+                    set a meta tag to associate it back to the numeric subnet.";
+
+```
+
+Whoa, thats a big one. Well, not really. But this one contained some "magic"
+that I felt deserved some extra explination. I strongly encourage you to take
+advantage of the knowledge management aspects in CFEngine, they are quite
+useful over the long term. So what does this do?
+
+This will iterate over the `subnets` list and define a class for the expanded
+value of `subnet_$(subnet_data[$(subnets)][subnet_nickname])`. We only define
+that class if the expression `iprange( $(subnets) )` evaluates to true.
+[iprange()][iprange_documentation] will only evaluate to true if the evaluating
+host has an ip within the range of the currently iterated subnet. So using our
+example data, if the evaluating host has an ip address of `192.168.33.2` the
+class `subnet_33_2` will be defined. Again we add some additional knowledge to
+the class by setting a meta tag to identify the class as being derived from a
+specific subnet. The rest of the classes type promises are pretty much the same
+thing, lets just skip ahead to reports type promises as they are the last
+promise type to be evaluated according to [normal ordering][normal_ordering].
+
+Reports type promises simply print messages. They will show up in logs or on
+the console if you are running the agent interactively. I usually use CFEngine
+Enterprise so for me reports are usually only useful for debugging, as I can
+easily surface promise outcomes in Mission Portal. They can however be useful
+for other log analysis tools like [sumo logic][sumo_logic], [splunk][splunk] or
+[log stash][log_stash]. Here I am using it purely for debugging purposes to
+print out all of the subnet information that is discovered. Note that I am not
+using any class restrictions so for each promise that contains `$(subnets)` the
+agent will iterate over each subnet and print the fully expanded result.
+
+Now we are at the end of the first pass. The agent will now go back to vars
+type promsies and attempt to activate any promises that have not yet been
+repaired (fixed), or previously kept (as desired). The first two variables have
+been resolved. If you recall, we skipped the rest on the first pass because no
+class was yet defined for `subnet_$(subnet_data[$(subnets)][subnet_nickname])`.
+On this second pass, we have the class `subnet_32_2` defined and now the
+`subnet_nickname` variable will be set to `subnet_32_2.
+
+In fact, we can activate this policy directly to see its output.
+
+**Note:** The following assumes you have CFEngine installed. If your looking
+for a good environment to work on your policy I would reccomend the [CFEngine
+Enterprise Vagrant Environment][enterprise_vagrant], that's what I use for my
+testing and development environment.
+
+From `services/skeletorg/classification/subnet_location` run
+`cf-agent -KIf ./main.cf -b classify_subnet_location -D DEBUG`
+
+```console
+[root@hub subnet_location]# cf-agent -KIf ./main.cf -b classify_subnet_location -D DEBUG
+2014-08-14T19:32:32+0000     info: Using command line specified bundlesequence
+R: classify_subnet_location: Activated
+R: classify_subnet_location: Found subnet 192.168.33.2/32
+R: classify_subnet_location: Found subnet 192.168.33.3/32
+R: classify_subnet_location: Found subnet 192.168.33.4/32
+R: classify_subnet_location: Found subnet nickname: mgmt
+R: classify_subnet_location: Found subnet city: Lawrence
+R: classify_subnet_location: Found subnet state: Kansas
+R: classify_subnet_location: Found subnet continent: North America
+R: classify_subnet_location: Found subnet country: USA
+R: classify_subnet_location: Found subnet site: over_rainbow
+```
+
+The command runs the agent without locks (-K), in inform mode (-I), using a
+speific file as the entry (-f), sets the bundlesequence to
+`classify_subnet_location` (-b), and additionally defines the class `DEBUG` for
+the current run (-D). You can find documentation about the
+[options cf-agent takes here][cf-agent-docs].
+
+Note how each subnet was found, regardless of weather or not it applied to the
+executing host. That is because we have no class restrictions on our reports
+type promises to restrict them to only print when the host is within the subnet
+range. The variables for subnet_nickname, city, state, continent, country, and
+site were only set if an ip on the host fell within the subnet. As you can see,
+this host fell within the `192.168.33.2/32` subnet and had its variables set
+appropriately. We can verify this by looking at the output of `ip addr show`.
+
+```console
+[root@hub subnet_location]# ip addr show | grep "192.168.33.2"
+    inet 192.168.33.2/24 brd 192.168.33.255 scope global eth1
+```
+
+Sure enough, my host has the ip `192.168.33.2` bound to eth1.
+
+Ok great, now we have a classification policy working. We just need to
+integrate it with the rest of our policy. The only thing left to do is to make
+sure that our classification policy is being included by our
+`services/skeletorg/main.cf` and add the `bundles` list defined in
+`bundle common classification_main_file_control` to
+the main bundlesequence as defined in `body common control`.
+
+Edit `services/skeletorg/main.cf` and add the following content to the top of the file:
+
+```cf3
+bundle common skeletorg_main_file_control
+{
+  vars:
+    "inputs"
+      slist => {
+                 "$(this.promise_dirname)/classification/main.cf"
+               };
+}
+
+body file control
+{
+  inputs => { @(skeletorg_main_file_control.inputs) };
+}
+```
+
+Notice that we reuse the same pattern from
+`services/skeletorg/classification/main.cf` to include other policy files. This
+keeps the changes to `promises.cf` minimal. I believe this makes incorperating
+changes from the upstream policy framework eaiser, and reduces the mental
+burdan when introducing a new person to the policy. I try to keep things
+semantically close and only expose as much detail as necessary. To get more
+detailed info you simply peel back the appropriate layer much like how bundles
+and bodies work in the policy language to limit the details you are confronted
+with. Again, I want to re-iterate that there is no right way to organize policy
+as long as whatever you are doing makes sense to your orginization and new
+people can start digesting your policy without being confronted with every
+single detail.
+
+Now edit `promises.cf` and add `@(classification_main_file_control.bundles)` to
+`bundlesequnce` in `body common control`. Classification needs to be done early
+during the policy run, so I suggest adding it just after the inventory bundles.
+Here is a diff of the changes I applied, I am using git, and generated this
+using the command `git diff promises.cf`.
+
+```diff
+diff --git a/promises.cf b/promises.cf
+index 5dd3eae..fa163e0 100644
+--- a/promises.cf
++++ b/promises.cf
+@@ +12,7 @@ body common control
+                         # Common bundle first (Best Practice)
+                           inventory_control,
+                           @(inventory.bundles),
++                          @(classification_main_file_control.bundles),
+                           def,
+                           cfe_internal_hub_vars,
+ 
+@@ +27,6 @@ body common control
+                           cfe_internal_management,   # See cfe_internal/CFE_cfengine.cf
+                           service_catalogue,
+ 
+-
+       };
+ 
+       inputs => {
+```
+
+At this point your classification policy is fully integrated with the rest of
+the policy. Again we can just run the policy to check it. This time, we will
+run the complete policy by running `cf-agent -KIf ./promises.cf -D DEBUG`.
+
+```console
+[root@hub masterfiles]# cf-agent -KIf ./promises.cf  -DDEBUG
+2014-08-14T20:30:59+0000     info: /default/inventory_autorun/methods/'packages_refresh'/default/cfe_autorun_inventory_packages/packages: Installing cfe_internal_non_existing_package...
+2014-08-14T20:31:00+0000     info: /default/inventory_autorun/methods/'packages_refresh'/default/cfe_autorun_inventory_packages/packages/'cfe_internal_non_existing_package'[0]: Q:yum --quiet -y insta ...:Error: Nothing to do
+R: cfe_autorun_inventory_packages: refresh interval is 10080
+R: cfe_autorun_inventory_packages: we have the inventory files.
+R: inventory_linux: OS release ID = $(os_release_id), OS release version = $(os_release_version)
+R: classify_subnet_location: Activated
+R: classify_subnet_location: Found subnet 192.168.33.2/32
+R: classify_subnet_location: Found subnet 192.168.33.3/32
+R: classify_subnet_location: Found subnet 192.168.33.4/32
+R: classify_subnet_location: Found subnet nickname: subnet_mgmt
+R: classify_subnet_location: Found subnet city: Lawrence
+R: classify_subnet_location: Found subnet state: Kansas
+R: classify_subnet_location: Found subnet continent: North America
+R: classify_subnet_location: Found subnet country: USA
+R: classify_subnet_location: Found subnet site: over_rainbow
+R: cfe_internal_apache_sudoer: editing of the sudoers file is disabled; the Apache user may not be able to run passwordless sudo cf-runagent
+R: skeletorg_main: Activated
+```
+
+Notice that we did not have to specify the `bundlesequence` manually since that
+is controlled by `body common control` in `promises.cf`.
+
+Now that we have a classification system lets add some policy to do something useful.
+
+Now that I have shown you how I (currently) like to organize policy I would
+like to show you how to report on this info from mission portal.
+
+
+
+
 First I updated the bundlesequence to include `@(skeletorg_main_file_control.common_bundles)`
 very early in the [bundlesequence][bundlesequence]. This will be a list of common bundles that
 skeletorg will use primarily for classification.
-
-Second I added the path to skeletorgs main poilcy. It will include the rest of
-the policy files needed.
-
-Finally, I activated the main policy using a [methods type promise][methods]
-
 
 [bundlesequence]https://docs.cfengine.com/latest/reference-components.html#bundlesequence)
 [He-Man](http://en.wikipedia.org/wiki/He-Man)
@@ -99,4 +540,15 @@ Finally, I activated the main policy using a [methods type promise][methods]
 [bundles-best-practice](https://docs.cfengine.com/latest/guide-writing-and-serving-policy-bundles-best-practices.html)
 [methods](https://docs.cfengine.com/latest/reference-promise-types-methods.html)
 [3.6.1-promises.cf](https://github.com/cfengine/masterfiles/blob/3.6.1/promises.cf)
-
+[body-file-control-inputs](https://docs.cfengine.com/latest/reference-components-file_control_promises.html#inputs)
+[this_promise_dirname](https://docs.cfengine.com/latest/reference-special-variables-this.html#this-promise_dirname)
+[best_practice_is_bad_blog](http://hildygottlieb.com/2009/09/20/when-%E2%80%9Cbest-practice%E2%80%9D-is-bad-practice/)
+[normal_ordering](https://docs.cfengine.com/latest/guide-language-concepts-normal-ordering.html)
+[iprange_documentation](https://docs.cfengine.com/latest/reference-functions-iprange.html)
+[ifvarclass_documentation](https://docs.cfengine.com/latest/reference-promise-types.html#ifvarclass)
+[enterprise_vagrant](https://docs.cfengine.com/latest/guide-installation-and-configuration-general-installation-installation-enterprise-vagrant.html)
+[sumo_logic](http://www.sumologic.com/)
+[log_stash](http://www.elasticsearch.org/overview/logstash/)
+[splunk](http://www.splunk.com/)
+[implicit_list_iteration](https://docs.cfengine.com/latest/guide-language-concepts-loops.html)
+[cf-agent-docs](https://docs.cfengine.com/latest/reference-components-cf-agent.html#command-reference)

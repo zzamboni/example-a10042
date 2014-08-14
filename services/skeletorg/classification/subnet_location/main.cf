@@ -1,0 +1,84 @@
+bundle common classify_subnet_location
+{
+  vars:
+      "subnet_data"
+        data => readjson( "$(this.promise_dirname)/data/subnet_location.json", 10M );
+
+      "subnets" slist => getindices("subnet_data");
+
+      "subnet_nickname"
+        string => "subnet_$(subnet_data[$(subnets)][subnet_nickname])",
+        ifvarclass => canonify("subnet_$(subnet_data[$(subnets)][subnet_nickname])"),
+        meta => { "inventory", "attribute_name=subnet nickname" };
+
+      "city"
+        string => "$(subnet_data[$(subnets)][city])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][city])"),
+        meta => { "inventory", "attribute_name=city" };
+
+      "state"
+        string => "$(subnet_data[$(subnets)][state])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][state])"),
+        meta => { "inventory", "attribute_name=state" };
+
+      "country"
+        string => "$(subnet_data[$(subnets)][country])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][country])"),
+        meta => { "inventory", "attribute_name=country" };
+
+      "continent"
+        string => "$(subnet_data[$(subnets)][continent])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][continent])"),
+        meta => { "inventory", "attribute_name=continent" };
+
+      "site"
+        string => "$(subnet_data[$(subnets)][site])",
+        ifvarclass => canonify("$(subnet_data[$(subnets)][site])"),
+        meta => { "inventory", "attribute_name=site" };
+
+  classes:
+
+      "subnet_$(subnet_data[$(subnets)][subnet_nickname])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)"},
+        comment => "We commonly refer to subnets by nickname. It could be
+                    43net, or something more fuzzy like frontend_webservers,
+                    this just provides a standard way to reference subnets with
+                    our normal terminoligy. Whatever the nickname, we prefix
+                    with 'subnet_' to clearly identify it as a subnet. We also
+                    set a meta tag to associate it back to the numeric subnet.";
+
+      "$(subnet_data[$(subnets)][city])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][state])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][country])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][continent])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+      "$(subnet_data[$(subnets)][site])"
+        expression => iprange( $(subnets) ),
+        meta => { "derived-from=$(subnets)" };
+
+
+  reports:
+
+      DEBUG::
+        "$(this.bundle): Activated";
+        "$(this.bundle): Found subnet $(subnets)";
+        "$(this.bundle): Found subnet nickname: $(subnet_nickname)";
+        "$(this.bundle): Found subnet city: $(city)";
+        "$(this.bundle): Found subnet state: $(state)";
+        "$(this.bundle): Found subnet continent: $(continent)";
+        "$(this.bundle): Found subnet country: $(country)";
+        "$(this.bundle): Found subnet site: $(site)";
+}
+
