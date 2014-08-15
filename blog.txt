@@ -1,9 +1,9 @@
-# Integrating your orginization
+# Integrating your organization
 
-Where should I put my orginizations policy files you ask?
+Where should I put my organizations policy files you ask?
 
 You can and should organize your policies in any way that makes sense to you.
-I very much encourage you to come to a consensus as an orginization, or at
+I very much encourage you to come to a consensus as an organization, or at
 least team. Seek input from others if its up to a single person alone, and be
 sure to record your reasons for choosing the a specific pattern. There truly is
 no right or wrong.
@@ -17,9 +17,9 @@ When I say service I mean the highest level of abstraction you and your team
 are comfortable with. I hope to show some examples that illustrate various
 scales of "service", and explain the things I like about this structure.
 
-Let's start with the highest level of orginization being either our company, or
+Let's start with the highest level of organization being either our company, or
 our team. In the example I will use `skeletorg` because its a skeleton of an
-example orginization and it brings to mind [the power of Greyskull][He-Man].
+example organization and it brings to mind [the power of Greyskull][He-Man].
 
 We will create the `skeletorg` directory inside of the services directory at
 the top level of masterfiles and put all of our custom policy and files inside
@@ -48,7 +48,7 @@ policy.
 
 
 Lets go ahead and make a few additons to `promises.cf` (the default policy
-entry). In order for your orginizations policy to be evaluated your policy files must
+entry). In order for your organizations policy to be evaluated your policy files must
 be added to `inputs` in `body common control`, and then your policy must be
 activated by either the bundle sequence or a [methods type promise][methods]
 
@@ -72,14 +72,14 @@ index af6f89f..5dd3eae 100644
        handle => "service_catalogue_change_management",
        usebundle => change_management;
  
-+   # Here is the main policy entry for our orginization. If other groups want
++   # Here is the main policy entry for our organization. If other groups want
 +   # to start managing their own policies, or if we acquire another
-+   # orginization, we can greate an org tree for them and activate it here.
++   # organization, we can greate an org tree for them and activate it here.
 +      "skeletorg"
 +        usebundle => skeletorg_main,
 +        handle => "service_catalogue_methods_any_skeletorg",
 +        comment => "If we don't activate policy for skeletorg, then the whole
-+                    orginization will not know if it is as desirged or not.";
++                    organization will not know if it is as desirged or not.";
 +
  }
  
@@ -459,7 +459,7 @@ semantically close and only expose as much detail as necessary. To get more
 detailed info you simply peel back the appropriate layer much like how bundles
 and bodies work in the policy language to limit the details you are confronted
 with. Again, I want to re-iterate that there is no right way to organize policy
-as long as whatever you are doing makes sense to your orginization and new
+as long as whatever you are doing makes sense to your organization and new
 people can start digesting your policy without being confronted with every
 single detail.
 
@@ -521,6 +521,9 @@ Notice that we did not have to specify the `bundlesequence` manually since that
 is controlled by `body common control` in `promises.cf`.
 
 Now that we have a classification system lets add some policy to do something useful.
+
+
+
 
 Now that I have shown you how I (currently) like to organize policy I would
 like to show you how to report on this info from mission portal.
