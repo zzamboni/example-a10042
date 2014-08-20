@@ -92,7 +92,8 @@ we create will be added from here.
 Second I activated the main policy using a [methods type promise][methods].
 
 
-Now lets validate that our policy is syntatically correct
+Now let's validate that our policy is syntactically correct
+
 ```
 cf-promises --full-check --file ./promises.cf
 
