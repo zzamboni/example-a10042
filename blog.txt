@@ -521,9 +521,142 @@ R: skeletorg_main: Activated
 Notice that we did not have to specify the `bundlesequence` manually since that
 is controlled by `body common control` in `promises.cf`.
 
-Now that we have a classification system lets add some policy to do something useful.
+Before we add some policy to make changes on our infrastructure lets add some inventory policy to collect information about current state for reporting in the CFEngine Enterprise Mission Portal.
 
+Inventory policy is really no different from classification policy. Both are just normal cfengine policy that discover data and report on it. The distinction I usually use is classification usually uses some kind of external business knowledge that you cannot determine solely by inspecting the state of a system, where as I refer to inventory policy as policy that only inspects the current state of the system.
 
+Let's replicate the pattern we used for classification policy and use it for inventory.
+
+Create `services/skeletorg/inventory/main.cf` with the following content:
+
+```cf3
+bundle agent skeletorg_inventory_main_file_control
+{
+  vars:
+    "inputs"
+      slist => {
+                 "$(this.promise_dirname)/ntp/main.cf",
+               };
+}
+
+body file control
+{
+  inputs => { @(skeletorg_inventory_main_file_control.inputs) };
+}
+
+bundle agent skeletorg_inventory_main
+{
+  methods:
+    "NTP"
+      usebundle => inventory_ntp_main;
+}
+```
+
+What does this policy do?
+
+Well just like the classification policy that we built previously, this gives a place to start organizing our inventory policy and an entry into it so that it is activated. `bundle agent skeletorg_inventory_main_file_control` defines a list of inputs that is used by `body file control` to augment inputs defined in `body common control` without us having to touch body common control. `bundle agent skeletorg_inventory_main` will activate our inventory policies by using methods type promises.
+
+Let's go ahead and integrate this inventory policy so that it is included in inputs.
+
+If you recall we added the path to the classification policy in `bundle common skeletorg_main_file_control` which is found in `services/skeletorg/main.cf`. We simply need to add `$(this.promise_dirname)/inventory/main.cf",` to inputs. We also need to activate the inventory policy. I like to do this by adding a `bundle agent skeletorg_main` which will in turn activate any of our inventory policies by using methods type promises. After making the modifications your `services/skeletorg/main.cf` should look similar to the following.
+
+```cf3
+bundle common skeletorg_main_file_control
+{
+  vars:
+      "inputs" slist => {
+                        "$(this.promise_dirname)/classification/main.cf",
+                        "$(this.promise_dirname)/inventory/main.cf",
+                        };
+}
+
+body file control
+{
+    inputs => { @(skeletorg_main_file_control.inputs) };
+}
+
+bundle agent skeletorg_main
+{ 
+  methods:
+      "Inventory" 
+        usebundle => skeletorg_inventory_main;
+
+  reports:
+    (inform_mode|verbose_mode)::
+      "$(this.bundle): Activated";
+}
+```
+
+Now we have to make sure that `bundle agent skeletorg_main` gets activated. We can do that by adding directly to the bundlesequence or by using a methods type promises. If you can't tell yet, I prefer to use methods type promises. I think it makes my policy read more like a story. Knowledge transfer has worked via story telling for ages. So to activate our skeletorg_main bundle lets add a methods type promise to `bundle agent service_catalogue`. This bundle (as of 3.6.1) is currently found in `promises.cf`.
+
+After adding a methods type promise to activate the `skeletorg_main` bundle your `bundle agent services_catalogue` should look something like the following.
+
+```cf3
+bundle agent service_catalogue
+{
+  methods:
+
+    any::
+
+      "security" -> { goal_infosec, goal_compliance }
+      comment => "Basic change management",
+      handle => "service_catalogue_change_management",
+      usebundle => change_management;
+
+   # Here is the main policy entry for our orginization. If other groups want
+   # to start managing their own policies, or if we acquire another
+   # orginization, we can create an org tree for them and activate it here.
+      "skeletorg"
+        usebundle => skeletorg_main,
+        handle => "service_catalogue_methods_any_skeletorg",
+        comment => "If we don't activate policy for skeletorg, then the whole
+                    orginization will not know if it is as desirged or not.";
+}
+```
+
+Now that we have wired up our inventory policy we can move on to adding the inventory policy for ntp that we included in `bundle agent skeletorg_inventory_main_file_control`.
+
+Create `services/skeletorg/inventory/ntp/main.cf` with the following content:
+
+```cf3
+bundle agent inventory_ntp_main
+{
+  vars:
+      "server_config_regex" string => "\s?+server\s+.*";
+
+      "ntp_config" string => "/etc/ntp.conf";
+
+    have_ntp_config::
+      "ntp_config_data" data => data_readstringarrayidx($(ntp_config), "\s*#[^\n]*", "\n", 100, 1M);
+      "ntp_config_data_idx" slist => getindices("ntp_config_data");
+
+      "ntp_config_server_entry[$(ntp_config_data_idx)]"
+        string => "$(ntp_config_data[$(ntp_config_data_idx)])",
+        ifvarclass => "ntp_config_server_entry_$(ntp_config_data_idx)";
+
+      "ntp_config_server_entries"
+        slist => getvalues("ntp_config_server_entry"),
+        meta => { "inventory", "attribute_name=NTP Server Config" };
+
+  classes:
+      "have_ntp_config" expression => fileexists($(ntp_config));
+
+      "ntp_config_server_entry_$(ntp_config_data_idx)"
+        expression => regcmp("$(server_config_regex)", "$(ntp_config_data[$(ntp_config_data_idx)])");
+
+  reports:
+    DEBUG::
+      "ntp_config_data_idx: $(ntp_config_data_idx)=$(ntp_config_data[$(ntp_config_data_idx)])";
+      "does '$(server_config_regex)' match '$(ntp_config_data[$(ntp_config_data_idx)])'?";
+      "ntp_config_server_entry found at index '$(ntp_config_server_entries)' with value '$(ntp_config_data[$(ntp_config_server_entries)])'";
+}
+```
+
+What does this policy do?
+
+This policy will parse the ntp config and define some variables with interesting information that we might want to report on before making changes to the ntp config across a set of hosts.
+
+First we define a variable `server_config_regex` as a regular expression to match some of the interesting data we want to extract. In this case I am interested in the value of `server` lines. Next we define a variable `ntp_config` that contains the path to the ntp config file. If that config file exists we continue on to read it into a data container and get an index of all the lines we collected. After that we build a list of the lines that match our `server_config_regex`. Finally we define the variable `ntp_config_server_entries` that contains a list of all of the server configuration values for ntp. We tag this variable with `inventory` and `attribute_name=NTP Server Config` so that it can be easily used for reporting from CFEngine Enterprises Mission Portal.
 
 
 Now that I have shown you how I (currently) like to organize policy I would
