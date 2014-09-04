@@ -1,0 +1,103 @@
+bundle agent inventory_nginx_plus {
+  vars:
+      # Data aquired from http://demo.nginx.com/status
+      "data" data => readjson("$(this.promise_dirname)/data/$(sys.uqhost).json", 10M);
+
+      "idx" slist => getindices("data");
+
+      "server_zones"
+        slist => getindices("data[server_zones]"),
+        meta => { "inventory", "attribute_name=Nginx Server Zones" };
+
+      "server_zones_str" string => join(", ", "server_zones");
+
+      "caches"
+        slist => getindices("data[caches]"),
+        meta => { "inventory", "attribute_name=Nginx Caches" };
+
+      "caches_str" string => join(", ", "caches");
+
+      "upstreams"
+        slist => getindices("data[upstreams]"),
+        meta => { "inventory", "attribute_name=Nginx Upstreams" };
+
+      "upstreams_str" string => join(", ", "upstreams");
+
+      "nginx_version"
+        string => "$(data[nginx_version])",
+        meta => { "inventory", "attribute_name=Nginx Version" };
+
+  classes:
+      "nginx_plus_server_zone_$(server_zones)"
+        scope => "namespace",
+        meta => { "derived-from=inventory_nginx_plus.server_zones" },
+        expression => "any";
+
+      "nginx_plus_cache_$(caches)"
+        scope => "namespace",
+        meta => { "derived-from=inventory_nginx_plus.caches" },
+        expression => "any";
+
+      "nginx_plus_upstream_$(upstreams)"
+        scope => "namespace",
+        meta => { "derived-from=inventory_nginx_plus.upstreams" },
+        expression => "any";
+
+  reports:
+    (inform_mode|verbose_mode)::
+      "Server Zones: '$(server_zones_str)'";
+      "Caches: '$(caches_str)'";
+      "Upstreams: '$(upstreams_str)'";
+}
+
+bundle agent inventory_nginx_plus_certificate
+{
+  vars:
+      "validation_command"
+        string => "/etc/init.d/nginx verify_cert";
+
+      "nginx_certificate_status"
+        string => execresult( $(validation_command), noshell ),
+        meta => { "inventory", "attribute_name=NginxPlus Certificate Status" };
+
+  classes:
+      "certificate_verified"
+        expression => strcmp("OK", $(nginx_certificate_status));
+
+      "certificate_issue"
+        not => strcmp("OK", $(nginx_certificate_status));
+
+  reports:
+    "STATUS: $(nginx_certificate_status)";
+    certificate_verified::
+      "Everything is gonna be aight";
+}
+
+bundle agent inventory_nginx_plus_license_expiration
+{
+  vars:
+      "validation_command"
+        string => "/etc/init.d/nginx get_days_from_license_expiration";
+
+      "result" string => execresult($(validation_command), "noshell");
+
+  before_expiration|after_expiration::
+      "days_from_license_expiration"
+        string => "$(days[1])",
+        meta => { "inventory", "attribute_name=Days from NginxPlus certificate expiration" };
+
+  classes:
+    "before_expiration" expression => regextract("(\d+) days from", $(result), "days");
+    "after_expiration" expression => regextract("-(\d+) days from", $(result), "days");
+
+  reports:
+    DEBUG|DEBUG_inventory_nginx_plus_license_expiration::
+      "$(result)";
+
+    (inform_mode|verbose_mode)::
+      "NginxPlus Certificate expires in $(days[1]) days"
+        ifvarclass => "before_expiration";
+
+      "NginxPlus Certificate expired $(days[1]) day ago"
+        ifvarclass => "after_expiration";
+}

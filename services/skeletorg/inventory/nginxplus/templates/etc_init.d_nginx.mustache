@@ -1,0 +1,246 @@
+#!/bin/sh
+#
+# nginx        Startup script for nginx
+#
+# chkconfig: - 85 15
+# processname: nginx
+# config: /etc/nginx/nginx.conf
+# config: /etc/sysconfig/nginx
+# pidfile: /var/run/nginx.pid
+# description: nginx is an HTTP and reverse proxy server
+#
+### BEGIN INIT INFO
+# Provides: nginx
+# Required-Start: $local_fs $remote_fs $network
+# Required-Stop: $local_fs $remote_fs $network
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: start and stop nginx
+### END INIT INFO
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+if [ -L $0 ]; then
+    initscript=`/bin/readlink -f $0`
+else
+    initscript=$0
+fi
+
+sysconfig=`/bin/basename $initscript`
+
+if [ -f /etc/sysconfig/$sysconfig ]; then
+    . /etc/sysconfig/$sysconfig
+fi
+
+nginx=${NGINX-/usr/sbin/nginx}
+prog=`/bin/basename $nginx`
+conffile=${CONFFILE-/etc/nginx/nginx.conf}
+lockfile=${LOCKFILE-/var/lock/subsys/nginx}
+pidfile=${PIDFILE-/var/run/nginx.pid}
+SLEEPMSEC=${SLEEPMSEC-200000}
+UPGRADEWAITLOOPS=${UPGRADEWAITLOOPS-5}
+RETVAL=0
+SUBS_CERT=/etc/ssl/nginx/nginx-repo.crt
+OPENSSL=/usr/bin/openssl
+CERT_EXT_CMD="$OPENSSL x509 -in $SUBS_CERT -text -certopt ca_default,no_sigdump,no_serial -noout"
+
+CCA="-----BEGIN CERTIFICATE-----
+MIIDjzCCAnegAwIBAgIJAIu3DxpkIGrqMA0GCSqGSIb3DQEBBQUAMF4xCzAJBgNV
+BAYTAlJVMQ8wDQYDVQQIDAZNb3Njb3cxDzANBgNVBAcMBk1vc2NvdzESMBAGA1UE
+CgwJTkdJTlggSW5jMRkwFwYDVQQDDBBuZ2lueCBjbGllbnRzIENBMB4XDTE0MDQx
+MjE3MTIyN1oXDTIyMDQxMjE3MTIyN1owXjELMAkGA1UEBhMCUlUxDzANBgNVBAgM
+Bk1vc2NvdzEPMA0GA1UEBwwGTW9zY293MRIwEAYDVQQKDAlOR0lOWCBJbmMxGTAX
+BgNVBAMMEG5naW54IGNsaWVudHMgQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAw
+ggEKAoIBAQDEPxQdivul86frKz1THqVDNjmFDWoX23w7ineOYJaCSR3e6SlXDM0B
+8Rv1ideNtU4mGAhLL7UaCO7b4kRbLF8AKyNoTXj8xxEGUQosufd5xdAe8P/jXIIi
+BqbCp9r8DtablLjzs81B9aXgMpoZgddDNsmIvHQn6qU6UerMLNUcB9LBOA2tbcCM
+JkZz/A1bWB7jH2SPOh5nuIfZ8w0at+MKFAhsFMkk1Dtm04lvQamqboUA+whmBCAg
+j85ReEOAf0WXMR+ADHfaLFvZ/zP5qhLYA+ebJ8frfbey3vs0DHS9AeKfKbvzBPlL
+feTvr039/orWmvAPI3i/i1JdtC5ed4DvAgMBAAGjUDBOMAwGA1UdEwQFMAMBAf8w
+HQYDVR0OBBYEFMV07soOaApznZzWDskzQAalCjB6MB8GA1UdIwQYMBaAFMV07soO
+aApznZzWDskzQAalCjB6MA0GCSqGSIb3DQEBBQUAA4IBAQAkMsoWHFZCZO8G4yxj
+IkfkUSV65JYo4BvvYUgQPwcEtTv8HNyj84Nwh3yXH62FyyZ0z0RMpzUwHkAm8o/y
+LNeEeKoh7T4uClZIogTt/fMJ768aod0Ta6u3KAIElvhoFe68jvrjYH/f1JkSetyz
+FNokgN1gkPSc9LU9ksquLORE8ooh33yucSr5yFTRnME1yDujPiXgiLjFBcFQ8mE3
+2LuerFU1g3NN7ZiB3Tgj4b2iKVGL/nnm8Un8czxU/yekhbTMBEgNPm28770WjwLH
+RhwnsNMWK0Wvv0X+xBoqad2ORnK6Yg91ka51NZWVA7EE3Q8EKaM9fX+VWL/JRB/X
+R2o2
+-----END CERTIFICATE-----"
+
+check_trial() {
+    test -x $OPENSSL || return 1
+    test -f $SUBS_CERT || return 1
+    verify_cert > /dev/null || return 1
+    $CERT_EXT_CMD | grep 'Trial subscription' >/dev/null 2>&1 || return 1
+    ENDDATE=`openssl x509 -enddate -in $SUBS_CERT -noout 2>/dev/null` || return 1
+    ENDDATE=`echo $ENDDATE | sed 's/.*=//'`
+    ENDDATE=`LC_TIME=C date -d "$ENDDATE" +%s` || return 1
+    CURDATE=`date +%s`
+
+    case "$ENDDATE$CURDATE" in
+        ''|*[!0-9]*) return 1;;
+    esac
+
+    if [ $CURDATE -gt $ENDDATE ]; then
+        echo
+        echo "Your trial subscription has expired. Exiting"
+        echo
+        exit 1
+    else
+        EXPDAYS=$((($ENDDATE-$CURDATE)/86400))
+        echo
+        echo "Your trial subscription will expire in $EXPDAYS days"
+        echo
+    fi
+}
+get_days_from_license_expiration(){
+    test -x $OPENSSL || return 1
+    test -f $SUBS_CERT || return 1
+    verify_cert > /dev/null || return 1
+    ENDDATE=`openssl x509 -enddate -in $SUBS_CERT -noout 2>/dev/null` || return 1
+    ENDDATE=`echo $ENDDATE | sed 's/.*=//'`
+    ENDDATE=`LC_TIME=C date -d "$ENDDATE" +%s` || return 1
+    CURDATE=`date +%s`
+
+    case "$ENDDATE$CURDATE" in
+        ''|*[!0-9]*) return 1;;
+    esac
+
+    EXPDAYS=$((($ENDDATE-$CURDATE)/86400))
+    echo "$EXPDAYS days from certificate expiration"
+
+    if [ $CURDATE -gt $ENDDATE ]; then
+        exit 1
+    fi
+
+}
+
+verify_cert() {
+    CCAFILE=`mktemp /tmp/ccafile.XXXXXX` || return 1
+    printf "%s" "$CCA" >$CCAFILE
+    result=`$OPENSSL verify -CAfile $CCAFILE $SUBS_CERT`
+    VALID=$?
+    #rm -f $CCAFILE
+    echo "$result" | cut -d" " -f 2-
+    return $VALID
+}
+
+start() {
+    echo -n $"Starting $prog: "
+
+    check_trial
+    daemon --pidfile=${pidfile} ${nginx} -c ${conffile}
+    RETVAL=$?
+    echo
+    [ $RETVAL = 0 ] && touch ${lockfile}
+    return $RETVAL
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    killproc -p ${pidfile} ${prog}
+    RETVAL=$?
+    echo
+    [ $RETVAL = 0 ] && rm -f ${lockfile} ${pidfile}
+}
+
+reload() {
+    echo -n $"Reloading $prog: "
+    killproc -p ${pidfile} ${prog} -HUP
+    RETVAL=$?
+    echo
+}
+
+upgrade() {
+    oldbinpidfile=${pidfile}.oldbin
+
+    configtest -q || return
+    echo -n $"Starting new master $prog: "
+    killproc -p ${pidfile} ${prog} -USR2
+    echo
+
+    for i in `/usr/bin/seq $UPGRADEWAITLOOPS`; do
+        /bin/usleep $SLEEPMSEC
+        if [ -f ${oldbinpidfile} -a -f ${pidfile} ]; then
+            echo -n $"Graceful shutdown of old $prog: "
+            killproc -p ${oldbinpidfile} ${prog} -QUIT
+            RETVAL=$?
+            echo
+            return
+        fi
+    done
+
+    echo $"Upgrade failed!"
+    RETVAL=1
+}
+
+configtest() {
+    if [ "$#" -ne 0 ] ; then
+        case "$1" in
+            -q)
+                FLAG=$1
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    fi
+    ${nginx} -t -c ${conffile} $FLAG
+    RETVAL=$?
+    return $RETVAL
+}
+
+rh_status() {
+    status -p ${pidfile} ${nginx}
+}
+
+# See how we were called.
+case "$1" in
+    start)
+        rh_status >/dev/null 2>&1 && exit 0
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        rh_status
+        RETVAL=$?
+        ;;
+    restart)
+        configtest -q || exit $RETVAL
+        stop
+        start
+        ;;
+    upgrade)
+        rh_status >/dev/null 2>&1 || exit 0
+        upgrade
+        ;;
+    condrestart|try-restart)
+        if rh_status >/dev/null 2>&1; then
+            stop
+            start
+        fi
+        ;;
+    force-reload|reload)
+        reload
+        ;;
+    configtest)
+        configtest
+        ;;
+    check_trial)
+        check_trial
+        ;;
+    verify_cert)
+        verify_cert
+        ;;
+    get_days_from_license_expiration)
+        get_days_from_license_expiration
+        ;;
+    *)
+        echo $"Usage: $prog {start|stop|restart|condrestart|try-restart|force-reload|upgrade|reload|status|help|configtest|check_trial|verify_cert}"
+        RETVAL=2
+esac
+
+exit $RETVAL
