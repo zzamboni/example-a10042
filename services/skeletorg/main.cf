@@ -4,6 +4,7 @@ bundle common skeletorg_main_file_control
   vars:
       "inputs" slist => {
                         "$(this.promise_dirname)/classification/main.cf",
+                        "$(this.promise_dirname)/inventory/main.cf",
                         };
 }
 
@@ -17,6 +18,9 @@ body file control
 bundle agent skeletorg_main
 # @brief Main Skeletorg Policy Activation Menu
 {
+  methods:
+      "Inventory" usebundle => skeletorg_inventory_main;
+
   reports:
     (inform_mode|verbose_mode)::
       "$(this.bundle): Activated";
