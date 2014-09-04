@@ -1,0 +1,37 @@
+bundle common skeletorg_inventory_main_file_control {
+  vars:
+      "inputs" slist => {
+                        "$(this.promise_dirname)/ssh/main.cf",
+                        "$(this.promise_dirname)/nginxplus/main.cf",
+                        "$(this.promise_dirname)/ntp/main.cf",
+                        "$(this.promise_dirname)/sysctl_conf/main.cf",
+                        "$(this.promise_dirname)/resolv_conf/main.cf",
+                        };
+}
+
+body file control {
+    inputs => { @(skeletorg_inventory_main_file_control.inputs) };
+}
+
+bundle agent skeletorg_inventory_main
+# @brief Activate Inventory Policies
+# This activates any custom inventory policies so that we can
+# inspect what we expect before we deploy new changes.
+{
+  methods:
+      "NTP" usebundle => inventory_ntp_main;
+
+      "sysctl_conf" usebundle => inventory_sysctl_conf_main;
+
+      "SSH" usebundle => inventory_ssh;
+
+      "NginxPlus" usebundle => inventory_nginx_plus;
+      "NginxPlusCertificate" usebundle => inventory_nginx_plus_certificate;
+      "NginxPlusDaysFromExpiration" usebundle => inventory_nginx_plus_license_expiration;
+
+      "resolv_conf" usebundle => inventory_resolv_conf;
+
+  reports:
+    (inform_mode|verbose_mode)::
+      "$(this.bundle): Activated";
+}

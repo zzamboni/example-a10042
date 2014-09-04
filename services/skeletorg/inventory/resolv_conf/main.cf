@@ -1,0 +1,51 @@
+bundle agent inventory_resolv_conf
+{
+  meta:
+    "tags" slist => { "autorun" };
+
+  vars:
+      "resolv_conf"    string => "/etc/resolv.conf";
+      "raw_resolv_conf" string => readfile( $(resolv_conf), 0 );
+
+    # Nameserver parsing
+      "dim_nameservers" int => parsestringarrayidx("nameserver", "$(raw_resolv_conf)", "\s*#[^\n]*", "^nameserver\s+", 1000, 4000);
+
+    nameserver_found::
+      "nameserver_idx" slist => getindices("nameserver");
+
+      "nameserver_entry[$(nameserver_idx)]" string => "$(nameserver[$(nameserver_idx)][1])";
+      "nameservers_tmp" slist => getvalues("nameserver_entry");
+
+      # For some reason we end up with an extra element in the nameserver list,
+      # so we filter for a digit (start of ip address)
+      "nameservers"
+        slist => filter("\d.*", nameservers_tmp, "true", "false", 100),
+        meta => { "inventory", "attribute_name=$(resolv_conf) nameservers"};
+
+  # search domain parsing
+    search_domain_found::
+      "search_domains_unfiltered" slist => string_split($(search_domain_string[1]), "\s+", 100);
+      # We end up with a blank entry in the unfiltered list, so need to filter
+      # it for word characters
+      "search_domains"
+        slist => filter("\w.*", search_domains_unfiltered, "true", "false", 100),
+        meta => { "inventory", "attribute_name=$(resolv_conf) search domains"};
+
+  classes:
+  # search domain parsing
+     "search_domain_found"
+       expression => regextract("search\s+(.*)$", $(raw_resolv_conf), "search_domain_string");
+
+  # Name server found
+    "nameserver_found"
+       expression => isgreaterthan($(dim_nameservers), 0);
+
+
+  reports:
+    inform_mode|verbose_mode::
+      "$(this.bundle): Inventorying '$(resolv_conf)'";
+      "$(this.bundle): Discovered nameserver '$(nameservers)'"
+        ifvarclass => "nameserver_found";
+      "$(this.bundle): Discovered search domain '$(search_domains)'"
+        ifvarclass => "search_domain_found";
+}
