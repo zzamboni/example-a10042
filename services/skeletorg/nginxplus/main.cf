@@ -1,0 +1,86 @@
+body file control
+{
+  inputs => { "/var/cfengine/inputs/lib/3.6/stdlib.cf" };
+}
+bundle common default_nginxplus_knowledge
+{
+  vars:
+    any::
+      "template[CA.crt]"
+        string => "$(this.promise_dirname)/templates/CA.crt.mustache",
+        comment => "https://cs.nginx.com/static/files/CA.crt";
+
+      "template[nginx-repo.crt]"
+        string => "$(this.promise_dirname)/templates/nginx-repo.crt.mustache";
+
+      "template[nginx-repo.key]"
+        string => "$(this.promise_dirname)/templates/nginx-repo.key.mustache";
+
+    ubuntu::
+      "template[repo]"
+        string => "$(this.promise_dirname)/templates/90nginx.mustache";
+
+    centos_6::
+      "template[repo]"
+        string => "$(this.promise_dirname)/templates/nginx-plus-6.repo.mustache";
+
+}
+
+bundle agent go
+{
+  methods:
+    "go" usebundle => nginxplus_repo("default_nginxplus_knowledge");
+    "do" usebundle => nginxplus_package("default_nginxplus_knowledge");
+}
+
+bundle agent nginxplus_package(knowledge)
+{
+  vars:
+    "package_name" string => "nginx-plus";
+    "package_handler" string => "package_present";
+
+  classes:
+    "use_package_present" expression => strcmp("package_present", $(package_handler) );
+  methods:
+    use_package_present::
+      "nginx-plus" usebundle => package_present( $(package_name) );
+
+}
+
+bundle agent nginxplus_repo(knowledge)
+{
+  vars:
+      "etc_ssl_nginx_files" slist => { "nginx-repo.key", "nginx-repo.crt", "CA.crt" };
+      "templates" slist => { "repo", @(etc_ssl_nginx_files) };
+
+      # Iterate over each etc_ssl_nginx_file and get its value from the knowledge bundle
+      "template[$(etc_ssl_nginx_files)]"
+        string => "$($(knowledge).$(this.promiser))",
+        comment => "The $(etc_ssl_nginx_files) is required for the nginxplus licensing validation and repository access.";
+
+      # Iterate over other templates and pull them in as local variables
+      "template[repo]"
+        string => "$($(knowledge).$(this.promiser))",
+        comment => "This template is needed to configure yum for access to the nginxplus repository";
+
+  files:
+
+      "/etc/ssl/nginx/."
+        create => "true";
+
+      "/etc/ssl/nginx/$(etc_ssl_nginx_files)"
+        create => "true",
+        edit_template => "$(template[$(etc_ssl_nginx_files)])",
+        template_method => "mustache",
+        comment => "These files are required for acceing the nginx repository as only licensed users have access";
+
+    centos|redhat::
+      "/etc/yum.repos.d/nginx-plus.repo"
+        create => "true",
+        edit_template => "$(template[repo])",
+        template_method => "mustache",
+        comment => "We need this so that yum can find the packages, I see no reason to make this configurable.";
+reports:
+  "$(template[$(templates)])";
+
+}
