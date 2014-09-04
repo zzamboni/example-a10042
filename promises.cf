@@ -223,9 +223,7 @@ bundle common services_autorun
 ###############################################################################
 
 bundle agent service_catalogue
-
 {
-
   methods:
 
     any::
@@ -237,13 +235,12 @@ bundle agent service_catalogue
 
    # Here is the main policy entry for our orginization. If other groups want
    # to start managing their own policies, or if we acquire another
-   # orginization, we can greate an org tree for them and activate it here.
+   # orginization, we can create an org tree for them and activate it here.
       "skeletorg"
         usebundle => skeletorg_main,
         handle => "service_catalogue_methods_any_skeletorg",
         comment => "If we don't activate policy for skeletorg, then the whole
                     orginization will not know if it is as desirged or not.";
-
 }
 
 # special body for update/*.cf compatibility
