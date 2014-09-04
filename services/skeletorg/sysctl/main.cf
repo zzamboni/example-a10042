@@ -1,0 +1,35 @@
+# sysctl - manages sysctl values in /etc/sysctl.conf
+bundle common sysctl_file_control
+{
+  vars:
+      "inputs"
+        slist =>
+          {
+          "$(this.promise_dirname)/knowledge.cf",
+          };
+}
+
+body file control
+{
+    inputs => { @(sysctl_file_control.inputs) };
+}
+
+bundle agent sysctl(knowledge)
+{
+  vars:
+      "sysctl_conf_file" string => "$($(knowledge).file[sysctl])";
+
+      "sysctl_conf_idx" slist => getindices("$(knowledge).sysctl");
+      "sysctl_conf[$(sysctl_conf_idx)]" string => "$($(knowledge).sysctl[$(sysctl_conf_idx)])";
+
+  files:
+  
+      "$(sysctl_conf_file)"
+        create => "true",
+        edit_line => set_line_based("sysctl.sysctl_conf", "=", "\s*=\s*", ".*", "\s*#\s*"),
+        comment =>  "set the right hand side values for /etc/sysctl.conf";
+
+  reports:
+    DEBUG|DEBUG_sysctl::
+      "bundle:$(this.bundle): $(sysctl_conf_idx) = $(sysctl_conf[$(sysctl_conf_idx)])";
+}

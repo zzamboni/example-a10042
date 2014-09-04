@@ -1,0 +1,25 @@
+bundle common sysctl_test_file_control
+{
+  vars:
+      "inputs"
+        slist =>
+          {
+          "$(this.promise_dirname)/../../../lib/$(sys.cf_version_major).$(sys.cf_version_minor)/stdlib.cf",
+          "$(this.promise_dirname)/main.cf",
+          };
+}
+
+body common control
+{
+    inputs => { @(sysctl_test_file_control.inputs) };
+    bundlesequence => { "test" };
+}
+
+bundle agent test
+{
+  vars:
+      "knowledge_bundle" string => "sysctl_knowledge";
+
+  methods:
+      "Sysctl" usebundle => sysctl($(knowledge_bundle));
+}
