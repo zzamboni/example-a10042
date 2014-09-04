@@ -636,7 +636,7 @@ bundle agent inventory_ntp_main
 
       "ntp_config_server_entries"
         slist => getvalues("ntp_config_server_entry"),
-        meta => { "inventory", "attribute_name=NTP Server Config" };
+        meta => { "inventory", "attribute_name=NTP Servers Configured" };
 
   classes:
       "have_ntp_config" expression => fileexists($(ntp_config));
@@ -656,8 +656,9 @@ What does this policy do?
 
 This policy will parse the ntp config and define some variables with interesting information that we might want to report on before making changes to the ntp config across a set of hosts.
 
-First we define a variable `server_config_regex` as a regular expression to match some of the interesting data we want to extract. In this case I am interested in the value of `server` lines. Next we define a variable `ntp_config` that contains the path to the ntp config file. If that config file exists we continue on to read it into a data container and get an index of all the lines we collected. After that we build a list of the lines that match our `server_config_regex`. Finally we define the variable `ntp_config_server_entries` that contains a list of all of the server configuration values for ntp. We tag this variable with `inventory` and `attribute_name=NTP Server Config` so that it can be easily used for reporting from CFEngine Enterprises Mission Portal.
+First we define a variable `server_config_regex` as a regular expression to match some of the interesting data we want to extract. In this case I am interested in the value of `server` lines. Next we define a variable `ntp_config` that contains the path to the ntp config file. If that config file exists we continue on to read it into a data container and get an index of all the lines we collected. After that we build a list of the lines that match our `server_config_regex`. Finally we define the variable `ntp_config_server_entries` that contains a list of all of the server configuration values for ntp. We tag this variable with `inventory` and `attribute_name=NTP Servers Configured` so that it can be easily used for reporting from CFEngine Enterprises Mission Portal.
 
+Before we get into making changes to our NTP configuration lets use our NTP inventory policy to take a look at how clients are currently configured.
 
 Now that I have shown you how I (currently) like to organize policy I would
 like to show you how to report on this info from mission portal.
