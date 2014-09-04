@@ -1,18 +1,21 @@
 bundle common skeletorg_main_file_control
+# @brief Define variable for files to be included into inputs
 {
   vars:
-    "inputs"
-      slist => {
-                 "$(this.promise_dirname)/classification/main.cf"
-               };
+      "inputs" slist => {
+                        "$(this.promise_dirname)/classification/main.cf",
+                        };
 }
 
 body file control
+# @brief Load necessary files into inputs
 {
-  inputs => { @(skeletorg_main_file_control.inputs) };
+    inputs => { @(skeletorg_main_file_control.inputs) };
 }
 
+
 bundle agent skeletorg_main
+# @brief Main Skeletorg Policy Activation Menu
 {
   reports:
     (inform_mode|verbose_mode)::
