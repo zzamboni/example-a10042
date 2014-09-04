@@ -22,5 +22,37 @@
     "country": "Norway",
     "site": "tiger_city",
     "continent": "Europe"
+  },
+  "192.168.33.5/32": {
+    "subnet_nickname": "host003",
+    "city": "Lawrence",
+    "state": "Kansas",
+    "country": "USA",
+    "site": "over_rainbow",
+    "continent": "North America"
+  },
+  "192.168.33.6/32": {
+    "subnet_nickname": "host004",
+    "city": "Oslo",
+    "state": "Ostlandet",
+    "country": "Norway",
+    "site": "tiger_city",
+    "continent": "Europe"
+  },
+  "192.168.33.7/32": {
+    "subnet_nickname": "host005",
+    "city": "Oslo",
+    "state": "Ostlandet",
+    "country": "Norway",
+    "site": "tiger_city",
+    "continent": "Europe"
+  },
+  "192.168.33.8/32": {
+    "subnet_nickname": "host006",
+    "city": "Singapore",
+    "state": "Singapore",
+    "country": "Singapore",
+    "site": "lion_town",
+    "continent": "Asia"
   }
 }
