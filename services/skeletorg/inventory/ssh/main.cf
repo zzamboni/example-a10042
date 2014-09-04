@@ -1,0 +1,55 @@
+# SSH
+# -Q	cipher | cipher-auth | mac | kex | key
+#  Queries ssh for the algorithms supported for the specified	ver-
+#  sion 2.  The available features are: cipher (supported symmetric
+#  ciphers), cipher-auth (supported symmetric	ciphers	that support
+#  authenticated encryption),	mac (supported message integrity
+#  codes), kex (key exchange algorithms), key	(key types).
+bundle common inventory_ssh
+{
+  vars:
+    "ssh_keygen" string => "/usr/bin/ssh-keygen";
+    "key_store"
+      string => "/etc/ssh/";
+
+    "host_keys"
+      slist => findfiles("$(key_store)/*key.pub");
+
+    "joined_host_keys"
+      string => join("$(const.n)", "host_keys");
+
+    # I want to extract the key type from the filename pattern, for each
+    # discovered public key
+    # Its in the pattern /etc/ssh//ssh_host_ed25519_key.pub where ed25519 is
+    # the string I want to extract.
+    "dim1"
+      int => parsestringarray("tmp1_key_types", $(joined_host_keys), "", "_key.pub", 100, 1M);
+    "idx_tmp1_key_types"
+      slist => getindices("tmp1_key_types");
+
+    # Now I have a string that I can etract a list of keys from
+    "joined_tmp1_key_types"
+      string => join("$(const.n)", "idx_tmp1_key_types");
+
+    # Lets finally extract the list of keys
+    "dim2"
+      int => parsestringarrayidx("tmp2_key_types", $(joined_tmp1_key_types), "", "host_", 100, 1M);
+    "idx_tmp2_key_types"
+      slist => getindices("tmp2_key_types");
+
+    "key_type[$(tmp2_key_types[$(idx_tmp2_key_types)][1])]"
+      string => "$(tmp2_key_types[$(idx_tmp2_key_types)][1])";
+
+    "key_types"
+      slist => getindices("key_type");
+
+    "host_key_fingerprint[$(key_types)]"
+      string => execresult("$(ssh_keygen) -l -f $(key_store)/ssh_host_$(key_types)_key.pub", "noshell");
+
+
+  reports:
+    (inform_mode|verbose_mode)::
+      "Found $(host_keys)";
+      "$(key_types)";
+      "Fingerprint for $(key_types): $(host_key_fingerprint[$(key_types)])";
+}
