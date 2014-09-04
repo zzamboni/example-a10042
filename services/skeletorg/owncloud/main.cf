@@ -1,0 +1,58 @@
+bundle common owncloud_from_repo_main_file_control
+{
+  vars:
+      "inputs" slist => {
+                        "$(sys.inputdir)/lib/3.6/stdlib.cf",
+                        "$(this.promise_dirname)/knowledge.cf",
+                        };
+}
+
+body file control {
+    inputs => { @(owncloud_from_repo_main_file_control.inputs) };
+}
+
+bundle agent owncloud_from_repo(knowledge)
+{
+  vars:
+      # Variables sourced from knowledge bundle
+      "yum_config_template" string => "$($(knowledge).yum_config_template)";
+      "webserver_config_template" string => "$($(knowledge).yum_config_template)";
+      "owncloud_version" string => "$($(knowledge).owncloud_version)";
+
+      # Opinionated implimentation, could be exposed as tunables, but meh
+      "yum_config_file" string => "/etc/yum.repos.d/owncloud_community.repo";
+      "webserver_config_file" string => "/etc/httpd/conf.d/owncloud.conf";
+
+      "packages" data => packagesmatching("opencloud", ".*", ".*", ".*");
+      "pkg_idx" slist => getindices("packages");
+
+  files:
+    redhat|centos::
+      "$(yum_config_file)"
+        create => "true",
+        edit_template => "$(yum_config_template)",
+        template_method => "mustache";
+
+      "$(webserver_config_file)"
+        create => "true",
+        edit_template => "$(webserver_config_template)",
+        template_method => "mustache",
+        classes => scoped_classes_generic("bundle", "webserver_config");
+
+  methods:
+      "owncloud"
+        #usebundle => package_spec("owncloud");
+        usebundle => package_specific_present("owncloud", "$(owncloud_version)", "noarch" );
+  services:
+    webserver_config_repaired::
+      "httpd" service_policy => "restart";
+
+    any::
+      "httpd" service_policy => "start";
+
+  reports:
+    DEBUG|DEBUG_owncloud_from_repo::
+      "$(yum_config_template)";
+      "$(webserver_config_template)";
+
+}

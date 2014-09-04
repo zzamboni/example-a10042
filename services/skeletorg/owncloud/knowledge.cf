@@ -1,0 +1,9 @@
+bundle common owncloud_from_repo_example_knowledge
+{
+  vars:
+    redhat|centos::
+      # This should use a yum config policy
+      "yum_config_template" string => "$(this.promise_dirname)/templates/$(sys.flavor)_community.repo.mustache";
+      "webserver_config_template" string => "$(this.promise_dirname)/templates/httpd_owncloud.conf.mustache";
+      "owncloud_version" string => "7.0.2-10.1";
+}

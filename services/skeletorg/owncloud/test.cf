@@ -1,0 +1,11 @@
+body common control
+{
+  inputs => { "main.cf", "knowledge.cf" };
+  bundlesequence => { "test_owncloud_from_repo" };
+}
+bundle agent test_owncloud_from_repo
+{
+  methods:
+    "Owncloud"
+      usebundle => owncloud_from_repo( "owncloud_from_repo_example_knowledge" );
+}

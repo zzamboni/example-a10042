@@ -1,0 +1,33 @@
+<Directory /var/www/html/owncloud>
+  AllowOverride All
+</Directory>
+
+
+#Alias /owncloud /usr/share/owncloud
+
+#<Directory /usr/share/owncloud/>
+#    Options -Indexes
+#
+#   <IfModule mod_authz_core.c>
+#    # Apache 2.4
+#    Require local
+#    </IfModule>
+#    <IfModule !mod_authz_core.c>
+#    # Apache 2.2
+#    Order Deny,Allow
+#    #Deny from all
+#    Allow from 192.168.0.0/8
+#    Allow from 127.0.0.1
+#    Allow from ::1
+#    </IfModule>
+#
+#    ErrorDocument 404 /core/templates/404.php
+#
+#    php_value upload_max_filesize 512M
+#    php_value post_max_size 512M
+#    php_value memory_limit 512M
+#    SetEnv htaccessWorking true
+#
+#    RewriteEngine on
+#    RewriteRule .* - [env=HTTP_AUTHORIZATION:%{HTTP:Authorization},last]
+#</Directory>
