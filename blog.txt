@@ -4,17 +4,17 @@ Where should I put my organizations policy files you ask?
 
 You can and should organize your policies in any way that makes sense to you.
 I very much encourage you to come to a consensus as an organization, or at
-least team. Seek input from others if its up to a single person alone, and be
+least as a team. Seek input from others if its up to a single person, and be
 sure to record your reasons for choosing the a specific pattern. There truly is
-no right or wrong.
+no right or wrong way to do it.
 
-That having been said, I encourage you to organize your policy from a "service"
+Having said that, I encourage you to organize your policy from a "services"
 perspective. Service can also be a loaded word. To a sysadmin, a service may
 mean an individual daemon like Apache, Nginx, or WebSphere. However services
-are also combinations of other services like the ERP application, which may be
+could also be combinations of other services like the ERP application, which may be
 comprised of multiple tiers of database servers, webservers and loadbalancers.
 When I say service I mean the highest level of abstraction you and your team
-are comfortable with. I hope to show some examples that illustrate various
+are comfortable with (or responsible for). I hope to show some examples that illustrate various
 scales of "service", and explain the things I like about this structure.
 
 Let's start with the highest level of organization being either our company, or
@@ -27,6 +27,8 @@ of it. If you don't know what masterfiles is please read the documentation
 [here][policy-framework], [here][authoring-workflow],
 [here][bundles-best-practice] and [here][policy-style]. From here on I will be
 refering to files *relative to the root of your masterfiles directory*.
+
+**DZ: change the "here" links to something more descriptive.**
 
 Create `services/skeletorg/main.cf` with the following content:
 
@@ -54,6 +56,8 @@ activated by either the bundle sequence or a [methods type promise][methods]
 
 Here is a diff that shows additions I have made to the [default `promises.cf`
 that ships with CFEngine 3.6.1][3.6.1-promises.cf].
+
+**DZ: How about using autorun to avoid changes to promises.cf**
 
 ```diff
 diff --git a/promises.cf b/promises.cf
@@ -86,10 +90,10 @@ index af6f89f..5dd3eae 100644
  # special body for update/*.cf compatibility
 ```
 
-First I added the path to skeletorgs main poilcy. Any additional policy files
+First I added the path to `skeletorg`'s main poilcy. Any additional policy files
 we create will be added from here.
 
-Second I activated the main policy using a [methods type promise][methods].
+Second I activated the main policy using a [methods promise][methods].
 
 
 Now let's validate that our policy is syntactically correct
@@ -150,26 +154,31 @@ body file control
 
 What does this policy do?
 
-Bundle common classification_main_file_control defines two varaibles that we
+Bundle common `classification_main_file_control` defines two varaibles that we
 will use to integrate our policy into the Masterfiles Policy Framework (MPF).
 `inputs` defines a list of files that should be included in body common control
 inputs. Note how the files are referenced using
-[$(this.promise_dirname)][this_promise_dirname]. I think this helps to keep the policy
+[`$(this.promise_dirname)`][this_promise_dirname]. This helps to keep the policy
 modular and makes things easier if you ever decide to re-organize and shuffle
-your directories around. We could use this varibale directly in the list of
-inputs defined in body common control, but I (currently) find its more elegant
-to extend inputs in body common control using the new (as of 3.6.0)
-[inputs attribute in body file control][body-file-control-inputs] as shown
+your directories around. We could use this variable directly in the list of
+inputs defined in body common control, but I find it more elegant
+to extend `inputs` in `body common control` using the new (as of 3.6.0)
+[`inputs` attribute in `body file control`][body-file-control-inputs] as shown
 above. `bundles` contains a list of common bundles that we want to
-specifically activate early in the bundlesequence in body common control. There
-is no way to automagically prepend or append to the bundlesequnce, nor do I
-(currently) think there should be. You don't have to add common bundles to the
-bundlesequence, but for common bundles that do classification and inventory
+specifically activate early in the `bundlesequence` in body common control. There
+is no way to automagically prepend or append to the `bundlesequence`, nor do I
+**DZ: but there is, with autorun!**
+(currently) think there should be. You don't have to add `common` bundles to the
+`bundlesequence`, but for common bundles that do classification and inventory
 it's generally considered a [best practice][best_practice_is_bad_blog].
 
 Let's go ahead and lay down the subnet location classification policy. Create
 `services/skeletorg/classification/subnet_location/main.cf` with the following
 content:
+
+**DZ: I would suggest showing a sample of the data that this bundle
+will process, to provide context and make the code easier to read. The
+bundle code might not even be needed in the text.**
 
 ```cf3
 bundle common classify_subnet_location
@@ -218,7 +227,7 @@ bundle common classify_subnet_location
         comment => "We commonly refer to subnets by nickname. It could be
                     43net, or something more fuzzy like frontend_webservers,
                     this just provides a standard way to reference subnets with
-                    our normal terminoligy. Whatever the nickname, we prefix
+                    our normal terminology. Whatever the nickname, we prefix
                     with 'subnet_' to clearly identify it as a subnet. We also
                     set a meta tag to associate it back to the numeric subnet.";
 
@@ -301,7 +310,7 @@ with the following content:
 ```
 
 Looking at the JSON data we can see that we have 3 (very small) subnets.
-`192.168.33.2/32`, `192.168.33.2/32`, and `192.168.33.2/32` each have
+`192.168.33.2/32`, `192.168.33.3/32`, and `192.168.33.4/32` each have
  a subnet nickname, city, state, country, site and continent associated with
 them. When this data is loaded into a CFEngine variable we can access it like a
 traditional CFEngine array. For example `$(subnet_data[192.168.33.2/32][site])`
@@ -311,7 +320,7 @@ Going back to our `classify_subnet_location` bundle we can see this in use:
 
 
 ```cf3
-      "city"
+      "subnet_nickname"
         string => "subnet_$(subnet_data[$(subnets)][subnet_nickname])",
         ifvarclass => canonify("$(subnet_data[$(subnets)][subnet_nickname])"),
         meta => { "inventory", "attribute_name=subnet nickname" };
@@ -319,9 +328,9 @@ Going back to our `classify_subnet_location` bundle we can see this in use:
 
 Instead of pulling data from a specifc subnet we are using CFEngines
 [implicit list iteration][implicit_list_iteration] to loop over each subnet and
-extract the subnet_nickname associated with it. We use
+extract the `subnet_nickname` associated with it. We use
 [ifvarclass][ifvarclass_documentation] to restrict the promise to only activate
-when a class for that subnet_nickname is defined. We do not yet have any
+when a class for that `subnet_nickname` is defined. We do not yet have any
 classes for any of the cities defined, so this promise will be skipped on the
 first pass along with the rest of the variables that are restricted to classes
 that are as of yet undefined. CFEngine has a concept called
@@ -346,7 +355,7 @@ promises for are classes, so lets take a look.
 ```
 
 Whoa, thats a big one. Well, not really. But this one contained some "magic"
-that I felt deserved some extra explination. I strongly encourage you to take
+that I felt deserved some extra explanation. I strongly encourage you to take
 advantage of the knowledge management aspects in CFEngine, they are quite
 useful over the long term. So what does this do?
 
@@ -382,7 +391,7 @@ On this second pass, we have the class `subnet_32_2` defined and now the
 
 In fact, we can activate this policy directly to see its output.
 
-**Note:** The following assumes you have CFEngine installed. If your looking
+**Note:** The following assumes you have CFEngine installed. If you are looking
 for a good environment to work on your policy I would reccomend the [CFEngine
 Enterprise Vagrant Environment][enterprise_vagrant], that's what I use for my
 testing and development environment.
@@ -663,7 +672,20 @@ Before we get into making changes to our NTP configuration lets use our NTP inve
 Now that I have shown you how I (currently) like to organize policy I would
 like to show you how to report on this info from mission portal.
 
-
+**DZ: This is good, but my main comment would be that it gets really
+  complicated really quickly, and spends too much time on the "basic
+  plumbing". The entirety of the article is spent on showing how
+  classification and inventory are done (basic plumbing), and none on
+  how to use that information, or what to do after that, i.e. how to
+  manage your services themselves, and how to structure things in a
+  way that makes it easy to add or change code, using the
+  classification and inventory information you now have. I would also
+  suggest staying at a high level as much as possible, and only dive
+  into the code after the high-level structure and purpose have been
+  explained. E.g. the classification bundle is enormous and very
+  hard to understand, and understanding its code is not really needed
+  for most users. But how to use it? How to use other classification
+  schemes, as you promise near the beginning?**
 
 
 First I updated the bundlesequence to include `@(skeletorg_main_file_control.common_bundles)`
